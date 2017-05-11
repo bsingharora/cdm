@@ -24,8 +24,6 @@
 
 extern nodemask_t cdm_nmask;
 
-#ifdef MIGRATE_PFN_MIGRATE
-
 static struct page *alloc_page_cdm(struct cdm_device *cdmdev,
 				   struct page *old)
 {
@@ -115,12 +113,3 @@ int cdm_migrate(struct cdm_device *cdmdev, struct cdm_migrate *mig)
 
 	return 0;
 }
-
-#else
-
-int cdm_migrate(struct cdm_device *cdmdev, struct cdm_migrate *mig)
-{
-	return -ENOSYS;
-}
-
-#endif /* MIGRATE_PFN_MIGRATE */
