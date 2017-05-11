@@ -132,15 +132,6 @@ int main(int argc, char **argv)
 		status[i] = -123;
 	}
 
-	if (!fflag) {
-		/* Move to starting node */
-		rc = numa_move_pages(0, page_count, addr, nodes, status, 0);
-		if (rc < 0 && errno != ENOENT) {
-			perror("move_pages");
-			exit(1);
-		}
-	}
-
 	/* Verify correct startup locations */
 	printf("Page location at the beginning of the test\n");
 	printf("------------------------------------------\n");
