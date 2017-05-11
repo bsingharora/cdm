@@ -16,7 +16,7 @@
 
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
-default: modules cdmctl migrate_pages
+default: modules migrate_pages
 
 migrate_pages: LDFLAGS = -lnuma
 
@@ -25,4 +25,4 @@ modules:
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD)/driver clean
-	$(RM) *.o cdmctl migrate_pages
+	$(RM) *.o migrate_pages

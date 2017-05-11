@@ -26,8 +26,6 @@
 #include "cdm.h"
 #include "uapi.h"
 
-int cdm_up(struct cdm_device *cdmdev);
-void cdm_down(struct cdm_device *cdmdev);
 int cdm_migrate(struct cdm_device *cdmdev, struct cdm_migrate *mig);
 
 #define CDM_DEVICE_MAX 6
@@ -49,11 +47,6 @@ static long cdm_fops_ioctl(struct file *file, unsigned int cmd,
 	cdmdev = container_of(miscdev, struct cdm_device, miscdev);
 
 	switch (cmd) {
-	case CDM_IOC_UP:
-		return cdm_up(cdmdev);
-	case CDM_IOC_DOWN:
-		cdm_down(cdmdev);
-		return 0;
 	case CDM_IOC_MIGRATE_BACK:
 		cdmdev = NULL;
 		/* fallthrough */
