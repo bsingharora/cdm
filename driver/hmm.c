@@ -39,12 +39,16 @@ struct page *cdm_devmem_alloc(struct cdm_device *cdmdev)
 	addr = cdmdev->mem + (PFN_PHYS(pfn) - cdmdev->res.start);
 	hmm_devmem_page_set_drvdata(page, (unsigned long)addr);
 
+	pr_info("%s: pfn 0x%lx, memremap=0x%p\n", __func__, pfn, addr);
+
 	cdmdev->free_pfn++;
 	return page;
 }
 
 static void cdm_devmem_free(struct hmm_devmem *devmem, struct page *page)
 {
+	pr_info("%s: 0x%lx\n", __func__, page_to_pfn(page));
+
 	hmm_devmem_page_set_drvdata(page, 0);
 }
 
@@ -58,6 +62,8 @@ static int cdm_fault(struct hmm_devmem *devmem, struct vm_area_struct *vma,
 	struct migrate_dma_ctx ctx = {};
 	unsigned long src, dst;
 
+	pr_info("%s: 0x%lx\n", __func__, addr);
+
 	ctx.ops = &cdm_migrate_ops;
 	ctx.src = &src;
 	ctx.dst = &dst;
@@ -65,6 +71,51 @@ static int cdm_fault(struct hmm_devmem *devmem, struct vm_area_struct *vma,
 	return hmm_devmem_fault_range(devmem, &ctx, vma, addr, addr,
 				      addr + PAGE_SIZE);
 }
+
+#ifdef WIP
+static void cdm_devmem_fault_collect(struct migrate_dma_ctx *ctx, unsigned long start,
+				     unsigned long end)
+{
+	for (; start < end; start += PAGE_SIZE) {
+		unsigned long pfn = PHYS_PFN(start);
+
+		get_page(pfn_to_page(pfn));
+
+		ctx->cpages++;
+		ctx->src[ctx->npages] = migrate_pfn(pfn);
+		ctx->src[ctx->npages++] |= MIGRATE_PFN_MIGRATE;
+	}
+}
+
+/*
+ * GPU fault, migrate to device memory
+ *
+ * start and end are physical addresses
+ */
+static int cdm_devmem_fault(struct cdm_device *cdmdev, unsigned long start,
+			    unsigned long end)
+{
+	struct migrate_dma_ctx ctx = {};
+	unsigned long addr, next;
+
+	for (addr = start; addr < end; addr = next) {
+		unsigned long src[64], dst[64];
+		int rc;
+
+		next = min(end, addr + (64 << PAGE_SHIFT));
+
+		ctx.ops = &cdm_migrate_ops;
+		ctx.src = src;
+		ctx.dst = dst;
+		ctx.private = cdmdev;
+		cdm_devmem_fault_collect(&ctx, addr, next);
+
+		rc = migrate_dma(&ctx);
+		if (rc)
+			return rc;
+	}
+}
+#endif
 
 static const struct hmm_devmem_ops cdm_devmem_ops = {
 	.free = cdm_devmem_free,
