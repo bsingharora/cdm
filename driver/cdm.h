@@ -24,6 +24,9 @@
 struct cdm_device {
 	struct miscdevice miscdev;
 	struct resource res;
+	struct hmm_devmem *devmem;
+	unsigned long free_pfn;
+	void *mem;
 };
 
 static inline struct device *cdmdev_dev(struct cdm_device *cdmdev)

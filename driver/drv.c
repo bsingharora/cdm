@@ -26,12 +26,14 @@
 #include "cdm.h"
 #include "uapi.h"
 
+int cdm_devmem_init(struct cdm_device *cdmdev);
+void cdm_devmem_remove(struct cdm_device *cdmdev);
 int cdm_migrate(struct cdm_device *cdmdev, struct cdm_migrate *mig);
 
 #define CDM_DEVICE_MAX 6
 
 static struct cdm_device *cdm_device[CDM_DEVICE_MAX];
-nodemask_t cdm_nmask = NODE_MASK_NONE;
+static nodemask_t cdm_nmask = NODE_MASK_NONE;
 
 static long cdm_fops_ioctl(struct file *file, unsigned int cmd,
 			   unsigned long arg)
@@ -141,6 +143,10 @@ static int cdm_device_probe(struct device_node *dn)
 	set_dev_node(dev, nid);
 	dev->of_node = dn;
 
+	rc = cdm_devmem_init(cdmdev);
+	if (rc)
+		goto err;
+
 	cdm_device[ncdm] = cdmdev;
 	node_set(nid, cdm_nmask);
 	return 0;
@@ -153,6 +159,7 @@ err:
 static void cdm_device_remove(struct cdm_device *cdmdev)
 {
 	node_clear(cdmdev_to_node(cdmdev), cdm_nmask);
+	cdm_devmem_remove(cdmdev);
 	cdm_miscdev_remove(&cdmdev->miscdev);
 	kfree(cdmdev);
 }

@@ -18,27 +18,12 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/hmm.h>
 #include <linux/migrate.h>
 #include "cdm.h"
 #include "uapi.h"
 
-extern nodemask_t cdm_nmask;
-
-static struct page *alloc_page_cdm(struct cdm_device *cdmdev,
-				   struct page *old)
-{
-	nodemask_t nmask = NODE_MASK_NONE;
-	gfp_t gfp = GFP_HIGHUSER_MOVABLE;
-	struct zonelist *zl;
-
-	if (cdmdev)
-		node_set(cdmdev_to_node(cdmdev), nmask);
-	else
-		nodes_andnot(nmask, node_states[N_MEMORY], cdm_nmask);
-
-	zl = node_zonelist(page_to_nid(old), gfp);
-	return __alloc_pages_nodemask(gfp, 0, zl, &nmask);
-}
+extern struct page *cdm_devmem_alloc(struct cdm_device *cdmdev);
 
 static void alloc_and_copy(struct migrate_dma_ctx *ctx)
 {
@@ -47,12 +32,28 @@ static void alloc_and_copy(struct migrate_dma_ctx *ctx)
 
 	for (i = 0; i < ctx->npages; i++) {
 		struct page *spage, *dpage;
+		void *from, *to;
 
 		if (!(ctx->src[i] & MIGRATE_PFN_MIGRATE))
 			continue;
 
 		spage = migrate_pfn_to_page(ctx->src[i]);
-		dpage = alloc_page_cdm(cdmdev, spage);
+
+		if (cdmdev) {
+			/*
+			 * migrate to device
+			 */
+			dpage = cdm_devmem_alloc(cdmdev);
+			from = page_address(spage);
+			to = (void *)hmm_devmem_page_get_drvdata(dpage);
+		} else {
+			/*
+			 * migrate from device
+			 */
+			dpage = alloc_page(GFP_HIGHUSER_MOVABLE);
+			from = (void *)hmm_devmem_page_get_drvdata(spage);
+			to = page_address(dpage);
+		}
 
 		if (!dpage) {
 			pr_err("%s: failed to alloc dst[%ld]\n", __func__, i);
@@ -61,7 +62,7 @@ static void alloc_and_copy(struct migrate_dma_ctx *ctx)
 		}
 
 		/* use dma here */
-		copy_highpage(dpage, spage);
+		memcpy(to, from, PAGE_SIZE);
 
 		lock_page(dpage);
 		ctx->dst[i] = migrate_pfn(page_to_pfn(dpage));
@@ -81,7 +82,7 @@ static void finalize_and_map(struct migrate_dma_ctx *ctx)
 	}
 }
 
-static const struct migrate_dma_ops cdm_migrate_ops = {
+const struct migrate_dma_ops cdm_migrate_ops = {
 	.alloc_and_copy = alloc_and_copy,
 	.finalize_and_map = finalize_and_map
 };
