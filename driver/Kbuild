@@ -1,4 +1,5 @@
 obj-m := cdm.o
+#obj-m := hmm_dmirror.o
 
 cdm-y := drv.o
 cdm-y += hp_sysfs.o

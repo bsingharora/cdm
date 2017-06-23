@@ -14,11 +14,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>
 
-KDIR ?= /lib/modules/$(shell uname -r)/build
+#KDIR ?= /lib/modules/$(shell uname -r)/build
+KDIR ?= $(HOME)/linuxd/linux
+#KDIR ?= $(HOME)/kernel-alt-4.11.0-9.el7/linux-4.11.0-9.fc25.x86_64
 
 default: modules cdmctl migrate_pages
 
-migrate_pages: LDFLAGS = -lnuma
+migrate_pages: LDLIBS = -lnuma
 
 modules:
 	$(MAKE) -C $(KDIR) M=$(PWD)/driver modules

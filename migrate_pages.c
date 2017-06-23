@@ -36,7 +36,7 @@ int cdm_migrate_pages(void *base, unsigned long size)
 	struct cdm_migrate mig;
 	int fd, rc;
 
-	fd = open("/dev/cdm1", O_NONBLOCK);
+	fd = open("/dev/cdm3", O_NONBLOCK);
 	if (fd < 0)
 		return fd;
 

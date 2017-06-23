@@ -23,6 +23,11 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/memory_hotplug.h>
+#include <linux/memory.h>
+#include <linux/mm.h>
+#include <linux/page-flags.h>
+#include <linux/printk.h>
 #include "cdm.h"
 #include "uapi.h"
 
@@ -148,8 +153,9 @@ static int cdm_device_probe(struct device_node *dn)
 	set_dev_node(dev, nid);
 	dev->of_node = dn;
 
-	cdm_device[ncdm] = cdmdev;
+	cdm_device[nid] = cdmdev;
 	node_set(nid, cdm_nmask);
+	pr_warn("found node %d, setting nid %d in mask\n", ncdm, nid);
 	return 0;
 
 err:
@@ -166,15 +172,67 @@ static void cdm_device_remove(struct cdm_device *cdmdev)
 
 static void cdm_device_remove_all(void)
 {
-	int ncdm = nodes_weight(cdm_nmask);
+	int ncdm = CDM_DEVICE_MAX;
 
-	while (ncdm)
-		cdm_device_remove(cdm_device[--ncdm]);
+	while (ncdm > 0) {
+		if (cdm_device[--ncdm])
+			cdm_device_remove(cdm_device[ncdm]);
+	}
 }
+
+/*
+ * So slab may get here before us and use the memory,
+ * well the pages are not yet available for use so act
+ * early
+ */
+static int driver_memory_notifier(struct notifier_block *self,
+					unsigned long action, void *arg)
+{
+
+	switch (action) {
+	case MEM_GOING_ONLINE: {
+		unsigned long pfn_list[] = {0, 0x10, 0x20, 0x100};
+		int i, nid;
+		struct memory_notify *marg = arg;
+		struct cdm_device *cdm_dev;
+		unsigned long start_pfn;
+
+		nid = marg->status_change_nid;
+		if (nid < 0)
+			return 0;
+
+		if (!node_isset(nid, cdm_nmask))
+			break;
+
+		cdm_dev = cdm_device[nid];
+		pr_warn("nid is %d cdm_dev %p\n", nid, cdm_dev);
+		if (!cdm_dev)
+			return 0;
+		start_pfn = cdm_dev->res.start >> PAGE_SHIFT;
+		for (i = 0; i < ARRAY_SIZE(pfn_list); i++) {
+			struct page *page = pfn_to_page(pfn_list[i] + start_pfn);
+			TestSetPageHWPoison(page);
+			pr_warn("offlined pfn %lx, nid %d\n", pfn_list[i] + start_pfn, nid);
+		}
+		break;
+	}
+	default:
+		pr_warn("Not taking any action on %ld\n",
+			action);
+	}
+	return 0;
+}
+
+static struct notifier_block driver_memory_cb = {
+	.notifier_call = driver_memory_notifier,
+	.priority = SLAB_CALLBACK_PRI,
+};
 
 static int __init cdm_init(void)
 {
 	struct device_node *dn;
+
+	register_hotmemory_notifier(&driver_memory_cb);
 
 	for_each_compatible_node(dn, NULL, "ibm,coherent-device-memory") {
 		int rc = cdm_device_probe(dn);
@@ -191,6 +249,7 @@ static int __init cdm_init(void)
 
 static void __exit cdm_exit(void)
 {
+	unregister_hotmemory_notifier(&driver_memory_cb);
 	cdm_device_remove_all();
 }
 
